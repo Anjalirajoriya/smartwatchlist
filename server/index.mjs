@@ -15,6 +15,15 @@ const db = process.env.DATABASE_URL ? new pg.Pool({ connectionString: process.en
 // Redis is intentionally not part of the MVP runtime. PostgreSQL is authoritative;
 // the service interfaces accept a null cache so Redis can be introduced at scale.
 const cache = null
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out`)), ms))
+  ])
+}
+function isRateLimitError(error) {
+  return /limit|429|too many/i.test(error.message || '')
+}
 let firebaseAuth = null
 try { const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || (process.env.FIREBASE_SERVICE_ACCOUNT_PATH ? readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH, 'utf8') : ''); if (rawServiceAccount) { const serviceAccount = JSON.parse(rawServiceAccount); if (!getApps().length) initializeApp({ credential: cert(serviceAccount) }); firebaseAuth = getAuth() } } catch { console.warn('Firebase Admin is not configured; demo auth is enabled.') }
 
@@ -36,7 +45,24 @@ async function detectMovement(stock, market) { const move = Math.abs(Number(mark
 
 app.get('/api/health', (_, res) => res.json({ database: Boolean(db), firebase: Boolean(firebaseAuth), cache: 'Not enabled in MVP; Redis is a documented scale-up path.', marketProvider: process.env.TWELVE_DATA_API_KEY ? 'Twelve Data' : 'Yahoo Finance (development fallback)' }))
 app.get('/api/search', requireUser, async (req, res) => { try { const q = String(req.query.q || '').trim(); if (q.length < 2) return res.json([]); res.json(await cached(`search:${q.toLowerCase()}`, 300, () => marketSearch(q))) } catch (error) { res.status(502).json({ error: error.message }) } })
-app.get('/api/stocks/:symbol', requireUser, async (req, res) => { try { const symbol = req.params.symbol, current = await quote(symbol); if (process.env.TWELVE_DATA_API_KEY) { const series = await twelve('time_series', { symbol, interval: '1day', outputsize: '30' }); return res.json({ ...current, history: (series.values || []).reverse().map(v => ({ time: v.datetime, price: Number(v.close) })) }) } const chart = await yahoo(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1mo&interval=1d`), result = chart.chart?.result?.[0], closes = result?.indicators?.quote?.[0]?.close || []; return res.json({ ...current, history: closes.map((price, i) => ({ time: new Date(result.timestamp[i] * 1000).toISOString(), price })).filter(x => x.price) }) } catch (error) { res.status(502).json({ error: error.message }) } })
+app.get('/api/stocks/:symbol', requireUser, async (req, res) => {
+  try {
+    const symbol = req.params.symbol
+    const current = await withTimeout(quote(symbol), 6000, 'Quote lookup')
+    if (process.env.TWELVE_DATA_API_KEY) {
+      const series = await withTimeout(twelve('time_series', { symbol, interval: '1day', outputsize: '30' }), 6000, 'Historical data')
+      return res.json({ ...current, history: (series.values || []).reverse().map(v => ({ time: v.datetime, price: Number(v.close) })) })
+    }
+    const chart = await withTimeout(yahoo(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1mo&interval=1d`), 6000, 'Historical data')
+    const result = chart.chart?.result?.[0], closes = result?.indicators?.quote?.[0]?.close || []
+    return res.json({ ...current, history: closes.map((price, i) => ({ time: new Date(result.timestamp[i] * 1000).toISOString(), price })).filter(x => x.price) })
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      return res.status(429).json({ error: 'Market data limit reached. Please try again in a minute.', rateLimited: true })
+    }
+    res.status(502).json({ error: 'Live price is temporarily unavailable. Please try again shortly.' })
+  }
+})
 app.get('/api/profile', requireUser, async (req, res) => { const history = await db.query(`SELECT s.symbol,s.company_name,w.added_at,w.removed_at FROM watchlist_items w JOIN stocks s ON s.id=w.stock_id WHERE w.user_id=$1 ORDER BY COALESCE(w.removed_at,w.added_at) DESC`, [req.user.id]); res.json({ user: req.user, history: history.rows }) })
 app.patch('/api/profile/preferences', requireUser, async (req, res) => { const { rows } = await db.query(`UPDATE users SET preferences = preferences || $2::jsonb WHERE id=$1 RETURNING preferences`, [req.user.id, JSON.stringify(req.body || {})]); res.json(rows[0].preferences) })
 app.get('/api/watchlist', requireUser, async (req, res) => { const { rows } = await db.query(`SELECT s.*,w.added_at,w.last_seen_at FROM watchlist_items w JOIN stocks s ON s.id=w.stock_id WHERE w.user_id=$1 AND w.removed_at IS NULL ORDER BY w.added_at DESC`, [req.user.id]); const result = await Promise.all(rows.map(async s => { try { const market = await quote(s.symbol); await db.query('INSERT INTO price_snapshots(stock_id,price,change_percent,source) VALUES($1,$2,$3,$4)', [s.id, market.price, market.change, 'Yahoo Finance']); await detectMovement(s, market); return { ...s, ...market, delayed: false } } catch { const last = await db.query('SELECT price,change_percent,timestamp FROM price_snapshots WHERE stock_id=$1 ORDER BY timestamp DESC LIMIT 1', [s.id]); return { ...s, price: Number(last.rows[0]?.price || 0), change: Number(last.rows[0]?.change_percent || 0), delayed: true } } })); await db.query('UPDATE watchlist_items SET last_seen_at=now() WHERE user_id=$1 AND removed_at IS NULL', [req.user.id]); res.json(result) })

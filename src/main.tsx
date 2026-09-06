@@ -38,7 +38,7 @@ function PriceHistoryChart({ history, change }: { history: { time: string; price
   return <div className="price-chart"><div className="chart-label top">₹{max.toLocaleString('en-IN', { maximumFractionDigits: 0 })} · {((max / base - 1) * 100).toFixed(1)}%</div><div className="chart-label bottom">₹{min.toLocaleString('en-IN', { maximumFractionDigits: 0 })} · {((min / base - 1) * 100).toFixed(1)}%</div><svg viewBox="0 0 300 145" preserveAspectRatio="none"><line x1="38" y1="16" x2="280" y2="16"/><line x1="38" y1="70" x2="280" y2="70"/><line x1="38" y1="124" x2="280" y2="124"/><polyline points={points} fill="none" stroke={change >= 0 ? '#00a77c' : '#dd675d'} strokeWidth="3" vectorEffect="non-scaling-stroke"/></svg><div className="chart-axis"><span>{history[0].time.slice(5, 10)}</span><span>Today</span></div></div>
 }
 
-function Rupee({ value }: { value: number }) { return <>₹{value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</> }
+function Rupee({ value }: { value: number | null | undefined }) { return <>₹{(value ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</> }
 
 function App() {
   const [watchlist, setWatchlist] = useState<Stock[]>(() => { try { const saved = localStorage.getItem('market-memory-watchlist'); return saved ? JSON.parse(saved) : allStocks.slice(0, 4) } catch { return allStocks.slice(0, 4) } })
@@ -104,8 +104,19 @@ const [discoverSearchMessage, setDiscoverSearchMessage] = useState('')
   return () => clearTimeout(timer)
 }, [discoverQuery, user])
   useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; localStorage.setItem('market-memory-theme', dark ? 'dark' : 'light') }, [dark])
-  const openStock = async (stock: Stock) => { try { const r = await fetch(`${API_BASE}/api/stocks/${encodeURIComponent(stock.symbol)}`, { headers: await headers() }); if (!r.ok) throw new Error(); const data = await r.json(); setStockDetail({ stock: stockFromApi(data), history: data.history || [] }) } catch { setStockDetail({ stock, history: stock.spark.map((price, i) => ({ time: String(i), price })) }) } }
-  useEffect(() => { const timer = setTimeout(async () => { if (search.trim().length < 2) { setFiltered([]); setSearchMessage(''); return }; setSearchMessage('Searching live market…'); try { const r = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(search)}`, { headers: await headers() }); if (!r.ok) throw new Error(); const data = await r.json(); const results = data.map(stockFromApi); if (!results.length) throw new Error(); setFiltered(results); setSearchMessage('') } catch { const results = allStocks.filter(s => `${s.symbol} ${s.name}`.toLowerCase().includes(search.toLowerCase())); setFiltered(results); setSearchMessage(results.length ? 'Showing reliable local results while live search reconnects.' : 'No matching stock found. Try TCS, INFY, HDFC, Reliance, or Tata.') } }, 250); return () => clearTimeout(timer) }, [search, user])
+  const openStock = async (stock: Stock) => {
+  try {
+    const r = await fetch(`${API_BASE}/api/stocks/${encodeURIComponent(stock.symbol)}`, { headers: await headers() })
+    if (r.status === 429) { setNotice('Market data limit reached. Please try again in a minute.'); setStockDetail({ stock, history: stock.spark.map((price, i) => ({ time: String(i), price })) }); return }
+    if (!r.ok) throw new Error()
+    const data = await r.json()
+    setStockDetail({ stock: stockFromApi(data), history: data.history || [] })
+  } catch {
+    setNotice('Live data is temporarily unavailable. Showing the last known values.')
+    setStockDetail({ stock, history: stock.spark.map((price, i) => ({ time: String(i), price })) })
+  }
+}
+useEffect(() => { const timer = setTimeout(async () => { if (search.trim().length < 2) { setFiltered([]); setSearchMessage(''); return }; setSearchMessage('Searching live market…'); try { const r = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(search)}`, { headers: await headers() }); if (!r.ok) throw new Error(); const data = await r.json(); const results = data.map(stockFromApi); if (!results.length) throw new Error(); setFiltered(results); setSearchMessage('') } catch { const results = allStocks.filter(s => `${s.symbol} ${s.name}`.toLowerCase().includes(search.toLowerCase())); setFiltered(results); setSearchMessage(results.length ? 'Showing reliable local results while live search reconnects.' : 'No matching stock found. Try TCS, INFY, HDFC, Reliance, or Tata.') } }, 250); return () => clearTimeout(timer) }, [search, user])
   const addStock = async (stock: Stock) => { if (!watchlist.some(s => s.symbol === stock.symbol)) setWatchlist(current => [...current, stock]); setSearch(''); setNotice(`${stock.symbol} added to your watchlist.`); try { const r = await fetch(`${API_BASE}/api/watchlist`, { method: 'POST', headers: await headers(), body: JSON.stringify({ symbol: stock.symbol }) }); if (r.ok) await loadWatchlist(); else throw new Error() } catch { setNotice(`${stock.symbol} saved locally. We’ll sync it when the API is available.`) } }
   const removeStock = async (symbol: string) => { const old = watchlist; setWatchlist(old.filter(s => s.symbol !== symbol)); try { const r = await fetch(`${API_BASE}/api/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE', headers: await headers() }); if (!r.ok && apiReady) setWatchlist(old) } catch { if (apiReady) setWatchlist(old) } }
   async function explain(event: Event) {
