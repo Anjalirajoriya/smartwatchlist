@@ -10,7 +10,13 @@ import { rateLimit } from './middleware/rate-limit.mjs'
 
 const app = express(), port = Number(process.env.PORT || process.env.API_PORT || 8787)
 app.use(express.json({ limit: '32kb' }))
-app.use((_, res, next) => { res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:5173'); res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Demo-User'); next() })
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:5173')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Demo-User')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+  if (req.method === 'OPTIONS') return res.sendStatus(204)
+  next()
+})
 const db = process.env.DATABASE_URL ? new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false } }) : null
 // Redis is intentionally not part of the MVP runtime. PostgreSQL is authoritative;
 // the service interfaces accept a null cache so Redis can be introduced at scale.
@@ -57,6 +63,7 @@ app.get('/api/stocks/:symbol', requireUser, async (req, res) => {
     const result = chart.chart?.result?.[0], closes = result?.indicators?.quote?.[0]?.close || []
     return res.json({ ...current, history: closes.map((price, i) => ({ time: new Date(result.timestamp[i] * 1000).toISOString(), price })).filter(x => x.price) })
   } catch (error) {
+
     if (isRateLimitError(error)) {
       return res.status(429).json({ error: 'Market data limit reached. Please try again in a minute.', rateLimited: true })
     }
