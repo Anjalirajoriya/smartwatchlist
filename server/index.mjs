@@ -8,7 +8,7 @@ import { createEvidenceIngestion } from './services/evidence-ingestion.mjs'
 import { attentionScore } from './services/attention-score.mjs'
 import { rateLimit } from './middleware/rate-limit.mjs'
 
-const app = express(), port = Number(process.env.PORT || process.env.API_PORT || 8787)const app = express(), port = Number(process.env.API_PORT || 8787)
+const app = express(), port = Number(process.env.PORT || process.env.API_PORT || 8787)
 app.use(express.json({ limit: '32kb' }))
 app.use((_, res, next) => { res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:5173'); res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Demo-User'); next() })
 const db = process.env.DATABASE_URL ? new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false } }) : null
