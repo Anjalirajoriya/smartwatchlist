@@ -41,7 +41,7 @@ function PriceHistoryChart({ history, change }: { history: { time: string; price
 function Rupee({ value }: { value: number | null | undefined }) { return <>₹{(value ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</> }
 
 function App() {
-  const [watchlist, setWatchlist] = useState<Stock[]>(() => { try { const saved = localStorage.getItem('market-memory-watchlist'); return saved ? JSON.parse(saved) : allStocks.slice(0, 4) } catch { return allStocks.slice(0, 4) } })
+ const [watchlist, setWatchlist] = useState<Stock[]>([])
   const [tab, setTab] = useState<'watchlist' | 'away' | 'discover' | 'profile'>('watchlist')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Event | null>(null)
@@ -83,7 +83,7 @@ const [discoverSearchMessage, setDiscoverSearchMessage] = useState('')
   const openNotifications = async () => { setShowNotifications(!showNotifications); if (!showNotifications) { await loadNotifications(); await fetch(`${API_BASE}/api/notifications/read`, { method: 'POST', headers: await headers() }) } }
 
     useEffect(() => { if (!auth) { setAuthResolved(true); return }; return onAuthStateChanged(auth, value => { setUser(value); setAuthResolved(true) }) }, [])
-  useEffect(() => { localStorage.setItem('market-memory-watchlist', JSON.stringify(watchlist)) }, [watchlist])
+  // useEffect(() => { localStorage.setItem('market-memory-watchlist', JSON.stringify(watchlist)) }, [watchlist])
 useEffect(() => { if (authResolved) { loadWatchlist(); loadFeed() } }, [authResolved, user])
   const loadDiscover = async () => { try { const r = await fetch(`${API_BASE}/api/discover`, { headers: await headers() }); if (!r.ok) throw new Error(); const data = await r.json(); setDiscoverStocks({ similar: (data.similar || []).map(stockFromApi), explore: (data.explore || []).map(stockFromApi) }) } catch { setDiscoverStocks({ similar: allStocks.slice(1, 3), explore: allStocks.slice(3) }) } }
   useEffect(() => { if (tab === 'discover') loadDiscover() }, [tab, user])
