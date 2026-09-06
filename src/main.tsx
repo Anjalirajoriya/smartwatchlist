@@ -81,9 +81,10 @@ const [discoverSearchMessage, setDiscoverSearchMessage] = useState('')
   const markActivitySeen = async () => { setUnseenActivity(0); try { await fetch(`${API_BASE}/api/feed/seen`, { method: 'POST', headers: await headers() }) } catch { /* UI remains read; next API refresh will reconcile. */ } }
   const loadNotifications = async () => { try { const r = await fetch(`${API_BASE}/api/notifications`, { headers: await headers() }); if (!r.ok) return; setNotifications(await r.json()) } catch { setNotifications([]) } }
   const openNotifications = async () => { setShowNotifications(!showNotifications); if (!showNotifications) { await loadNotifications(); await fetch(`${API_BASE}/api/notifications/read`, { method: 'POST', headers: await headers() }) } }
-  useEffect(() => { if (!auth) { loadWatchlist(); loadFeed(); return }; return onAuthStateChanged(auth, value => { setUser(value); setAuthResolved(true) }) }, [])
+
+    useEffect(() => { if (!auth) { setAuthResolved(true); return }; return onAuthStateChanged(auth, value => { setUser(value); setAuthResolved(true) }) }, [])
   useEffect(() => { localStorage.setItem('market-memory-watchlist', JSON.stringify(watchlist)) }, [watchlist])
-  useEffect(() => { loadWatchlist(); loadFeed() }, [user])
+useEffect(() => { if (authResolved) { loadWatchlist(); loadFeed() } }, [authResolved, user])
   const loadDiscover = async () => { try { const r = await fetch(`${API_BASE}/api/discover`, { headers: await headers() }); if (!r.ok) throw new Error(); const data = await r.json(); setDiscoverStocks({ similar: (data.similar || []).map(stockFromApi), explore: (data.explore || []).map(stockFromApi) }) } catch { setDiscoverStocks({ similar: allStocks.slice(1, 3), explore: allStocks.slice(3) }) } }
   useEffect(() => { if (tab === 'discover') loadDiscover() }, [tab, user])
     useEffect(() => {
