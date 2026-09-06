@@ -6,6 +6,59 @@ A watchlist that doesn't just show you prices. It remembers what you were watchi
 
 ---
 
+##Instructions to Run
+1. Clone the repository:
+   git clone https://github.com/Anjalirajoriya/smartwatchlist.git
+   cd smartwatchlist
+
+2. Install dependencies:
+   npm install
+
+3. Run the application in Demo Mode:
+   npm run dev
+
+4. Open the URL shown in the terminal (usually):
+   http://localhost:5173
+
+For full functionality:
+
+5. Create the environment file:
+   cp .env.example .env
+
+6. Configure the required environment variables in .env:
+   - PostgreSQL DATABASE_URL
+   - Firebase configuration
+   - GNEWS_API_KEY
+   - TWELVE_DATA_API_KEY
+   - GROQ_API_KEY (optional)
+   - REDIS_URL (optional)
+
+7. Run database migrations:
+   npm run db:migrate
+
+8. Start the backend API in one terminal:
+   npm run api
+
+9. Start the frontend in another terminal:
+    npm run dev
+
+10. Open the frontend URL and sign in using Firebase Authentication.
+
+IMPORTANT NOTE : 
+Note on Live Deployment:
+
+Some features of this project may not function fully on the live deployed link due to third-party API rate limits (market data / evidence provider) on the free tier. All features — live watchlist sync, real-time price updates, event detection, and the evidence assistant — work completely when run locally.
+
+Please watch the attached demo video till the end for a full walkthrough of all features, recorded on localhost.
+
+To run locally:
+
+Clone the repository
+Add the required .env values (API keys, Firebase config, database URL)
+Run the frontend and backend servers
+All features will work without rate-limit restrictions
+
+
 ## Table of Contents
 
 - [Problem Statement](#the-problem-i-chose-to-solve)
@@ -251,3 +304,5 @@ Without a key, "Explain more" shows a safe local fallback message instead of fai
 **How does this scale to many users?** Events, evidence, and explanations are global rows, computed once and read by everyone watching that stock. Per-user state is intentionally thin — just a relationship row, not a duplicated copy of shared data.
 
 **How do you actually prevent hallucination?** Structurally, not just by prompting carefully: an event with no verified evidence is never allowed to reach the LLM at all. The LLM only ever sees evidence that's already been saved and verified — it rephrases, it doesn't originate facts.
+
+
