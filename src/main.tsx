@@ -69,7 +69,7 @@ const [discoverSearchMessage, setDiscoverSearchMessage] = useState('')
   const [showNotifications, setShowNotifications] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const headers = async () => ({ 'Content-Type': 'application/json', ...(user ? { Authorization: `Bearer ${await user.getIdToken()}` } : { 'X-Demo-User': 'demo-user' }) })
-  const stockFromApi = (s: any): Stock => ({ symbol: s.symbol, name: s.name || s.company_name, price: Number(s.price), change: Number(s.change), delayed: s.delayed, reason: s.reason, color: ['#507be8','#4b9d7a','#9971c9','#da9f40'][s.symbol.length % 4], spark: [35,38,37,40,39,42,41,45,44,47,46,49] })
+ const stockFromApi = (s: any): Stock => ({ symbol: s.symbol, name: s.name || s.company_name, price: Number.isFinite(Number(s.price)) ? Number(s.price) : 0, change: Number.isFinite(Number(s.change)) ? Number(s.change) : 0, delayed: s.delayed ?? (s.price === undefined), reason: s.reason, color: ['#507be8','#4b9d7a','#9971c9','#da9f40'][s.symbol.length % 4], spark: [35,38,37,40,39,42,41,45,44,47,46,49] })
  const summary = { 
   totalValue: watchlist.reduce((sum, s) => sum + (s.price ?? 0), 0),
   todayChange: watchlist.reduce((sum, s) => sum + ((s.price ?? 0) * (s.change ?? 0)) / (100 + (s.change ?? 0)), 0),
