@@ -219,6 +219,7 @@ The app now opens on a **login screen** — the browser sends Firebase's ID toke
 
 1. Get a free key at [gnews.io](https://gnews.io) and **verify the activation email** — the API returns `403` until confirmed.
 2. Add `GNEWS_API_KEY` to `.env`.
+3. Add TWELVE_DATA api to `TWELVE_DATA_API_KEY`
 
 ### Enable "Explain more" (Groq)
 
@@ -241,7 +242,7 @@ Without a key, "Explain more" shows a safe local fallback message instead of fai
 
 ---
 
-## Anticipated Questions
+## Anticipated Questions 
 
 **Why no microservices?** No independent scaling requirement exists yet — the modules already have clean boundaries, so splitting them later is a refactor, not a rewrite.
 
